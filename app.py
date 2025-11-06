@@ -49,11 +49,13 @@ def configure_page() -> None:
                 margin-bottom: 0.25rem;
                 text-transform: uppercase;
                 letter-spacing: 0.04rem;
+                text-align: center;
             }}
             .body-text {{
                 margin-bottom: 0.75rem;
                 color: #000000;
                 line-height: 1.5;
+                text-align: center;
             }}
             .summary-box {{
                 border: 1px solid {THEME_NAVY};
@@ -62,11 +64,11 @@ def configure_page() -> None:
                 color: #000000;
                 background-color: #FFFFFF;
                 border-radius: 2px;
+                text-align: center;
             }}
-            .summary-box ul {{
-                margin: 0.25rem 0 0 1rem;
-                padding: 0;
-                line-height: 1.5;
+            .summary-line {{
+                margin: 0.2rem 0;
+                line-height: 1.45;
             }}
             .notice {{
                 border: 1px solid {THEME_NAVY};
@@ -75,6 +77,7 @@ def configure_page() -> None:
                 color: #000000;
                 background-color: #FFFFFF;
                 border-radius: 2px;
+                text-align: center;
             }}
             .notice.error {{
                 border-style: dashed;
@@ -128,10 +131,10 @@ def render_summary(summaries: Dict[str, Dict[str, int]]) -> None:
         if sheet_name != "TOTAL"
     ]
 
-    html = "<ul>" + "".join(f"<li>{line}</li>" for line in primary_lines) + "</ul>"
+    html = "".join(f"<div class='summary-line'>{line}</div>" for line in primary_lines)
     if detail_lines:
         html += f"<hr style='border: none; border-top: 1px solid {THEME_NAVY}; margin: 0.6rem 0;'/>"
-        html += "<ul>" + "".join(f"<li>{line}</li>" for line in detail_lines) + "</ul>"
+        html += "".join(f"<div class='summary-line'>{line}</div>" for line in detail_lines)
 
     st.markdown('<div class="section-title">Summary</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="summary-box">{html}</div>', unsafe_allow_html=True)
