@@ -47,9 +47,11 @@ def configure_page() -> None:
                 color: #000000;
                 margin-top: 1.5rem;
                 margin-bottom: 0.5rem;
+                text-align: center;
             }}
             .body-text {{
                 margin-bottom: 0.75rem;
+                text-align: center;
             }}
             .summary-box {{
                 border: 1px solid {THEME_NAVY};
@@ -57,6 +59,11 @@ def configure_page() -> None:
                 margin-top: 1rem;
                 color: #000000;
                 background-color: #FFFFFF;
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
             }}
             .status-message {{
                 border: 1px solid {THEME_NAVY};
@@ -64,6 +71,10 @@ def configure_page() -> None:
                 margin-top: 1rem;
                 color: #000000;
                 background-color: #FFFFFF;
+                text-align: center;
+                display: flex;
+                justify-content: center;
+                align-items: center;
             }}
             .status-message.error {{
                 border-style: dashed;

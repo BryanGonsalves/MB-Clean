@@ -227,9 +227,27 @@ def _normalize_date_columns(
         if _looks_like_date_column(normalized[col])
     ]
 
+    excel_origin = "1899-12-30"
+
     for col in candidate_cols:
         series = normalized[col]
-        parsed = pd.to_datetime(series, errors="coerce", infer_datetime_format=True, utc=False)
+        parsed = pd.to_datetime(series, errors="coerce", utc=False)
+
+        numeric_mask = parsed.isna() & series.notna()
+        if numeric_mask.any():
+            numeric_values = pd.to_numeric(series[numeric_mask], errors="coerce")
+            numeric_values = numeric_values.where(numeric_values.between(59, 600000))
+            excel_dates = pd.to_datetime(
+                numeric_values,
+                unit="D",
+                origin=excel_origin,
+                errors="coerce",
+            )
+            excel_valid = excel_dates.notna()
+            if excel_valid.any():
+                valid_idx = excel_dates.index[excel_valid]
+                parsed.loc[valid_idx] = excel_dates.loc[valid_idx]
+
         mask_valid = parsed.notna()
         formatted = series.astype("string")
 
@@ -241,7 +259,7 @@ def _normalize_date_columns(
             if unresolved_mask.any():
                 original_values = series.loc[unresolved_mask].astype("string").tolist()
                 ai_suggestions = ai_normalizer.normalize_dates(original_values)
-                reparsed = pd.to_datetime(ai_suggestions, errors="coerce", infer_datetime_format=True, utc=False)
+                reparsed = pd.to_datetime(ai_suggestions, errors="coerce", utc=False)
                 for idx, suggestion, parsed_value in zip(series.loc[unresolved_mask].index, ai_suggestions, reparsed):
                     if pd.notna(parsed_value):
                         formatted.loc[idx] = parsed_value.strftime("%Y-%m-%d")
@@ -324,10 +342,19 @@ def _looks_like_date_column(series: pd.Series) -> bool:
     if pd.api.types.is_datetime64_any_dtype(series):
         return True
 
-    if series.dropna().empty:
+    non_na_series = series.dropna()
+
+    if non_na_series.empty:
         return False
 
-    sample = series.dropna().astype("string").str.strip().head(25)
+    numeric = pd.to_numeric(non_na_series, errors="coerce")
+    numeric = numeric.dropna()
+    if not numeric.empty:
+        plausible = numeric.between(59, 600000)  # Excel day numbers roughly through year 2600
+        if plausible.mean() >= 0.5:
+            return True
+
+    sample = non_na_series.astype("string").str.strip().head(25)
     potential_matches = 0
     for value in sample:
         if not value:
@@ -420,6 +447,7 @@ def _write_with_formatting(workbook, worksheet, df: pd.DataFrame) -> None:
             "font_color": HEADER_FONT_COLOR if is_header else BODY_FONT_COLOR,
             "align": "center" if is_header else "left",
             "valign": "vcenter",
+            "font_name": "Gopher",
         }
         if is_header:
             base.update(
@@ -469,6 +497,11 @@ def _write_with_formatting(workbook, worksheet, df: pd.DataFrame) -> None:
     widths = _estimate_column_widths(headers, rows)
     for idx, width in enumerate(widths):
         worksheet.set_column(start_col + idx, start_col + idx, width)
+
+    if total_cols > 0:
+        filter_end_row = start_row if total_rows == 0 else start_row + total_rows
+        filter_end_col = start_col + total_cols - 1
+        worksheet.autofilter(start_row, start_col, filter_end_row, filter_end_col)
 
 
 def _estimate_column_widths(headers: Iterable[str], rows: List[List]) -> List[int]:
