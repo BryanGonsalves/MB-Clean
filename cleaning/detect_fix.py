@@ -4,22 +4,15 @@ from __future__ import annotations
 
 import io
 import re
-from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
-from dateutil import parser as date_parser
 from email_validator import EmailNotValidError, validate_email
 import phonenumbers
 from phonenumbers.phonenumberutil import NumberParseException, PhoneNumberFormat
-
-try:
-    from .ai_normalize import AINormalizer
-except Exception:  # pragma: no cover - optional dependency
-    AINormalizer = None
 
 NA_COLOR = "#0A1D44"
 HEADER_FONT_COLOR = "#FFFFFF"
@@ -33,7 +26,7 @@ class SheetSummary:
     sheet_name: str
     initial_rows: int
     duplicates_removed: int
-    invalid_rows_removed: int
+    invalid_contacts_cleared: int
     final_rows: int
 
     @property
@@ -41,7 +34,7 @@ class SheetSummary:
         return {
             "initial_rows": self.initial_rows,
             "duplicates_removed": self.duplicates_removed,
-            "invalid_rows_removed": self.invalid_rows_removed,
+            "invalid_contacts_cleared": self.invalid_contacts_cleared,
             "final_rows": self.final_rows,
         }
 
@@ -70,28 +63,23 @@ def load_uploaded_data(uploaded_file) -> Dict[str, pd.DataFrame]:
 
 def clean_workbook(
     sheets: Dict[str, pd.DataFrame],
-    *,
-    enable_ai: bool = False,
-    ai_normalizer: Optional[AINormalizer] = None,
 ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict[str, int]]]:
     """Clean every sheet in the uploaded workbook."""
 
     cleaned_sheets: Dict[str, pd.DataFrame] = {}
     summaries: Dict[str, Dict[str, int]] = {}
-    totals = SheetSummary(sheet_name="TOTAL", initial_rows=0, duplicates_removed=0, invalid_rows_removed=0, final_rows=0)
+    totals = SheetSummary(sheet_name="TOTAL", initial_rows=0, duplicates_removed=0, invalid_contacts_cleared=0, final_rows=0)
 
     for sheet_name, df in sheets.items():
         cleaned_df, summary = _clean_dataframe(
             df,
-            enable_ai=enable_ai and ai_normalizer is not None,
-            ai_normalizer=ai_normalizer,
         )
         cleaned_sheets[sheet_name] = cleaned_df
         summaries[sheet_name] = summary.as_dict
 
         totals.initial_rows += summary.initial_rows
         totals.duplicates_removed += summary.duplicates_removed
-        totals.invalid_rows_removed += summary.invalid_rows_removed
+        totals.invalid_contacts_cleared += summary.invalid_contacts_cleared
         totals.final_rows += summary.final_rows
 
     summaries["TOTAL"] = totals.as_dict
@@ -127,9 +115,6 @@ def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame]) -> bytes:
 
 def _clean_dataframe(
     df: pd.DataFrame,
-    *,
-    enable_ai: bool = False,
-    ai_normalizer: Optional[AINormalizer] = None,
 ) -> Tuple[pd.DataFrame, SheetSummary]:
     """Apply the full cleaning pipeline to a single DataFrame."""
 
@@ -142,19 +127,19 @@ def _clean_dataframe(
             sheet_name="",
             initial_rows=0,
             duplicates_removed=0,
-            invalid_rows_removed=0,
+            invalid_contacts_cleared=0,
             final_rows=0,
         )
 
     working_df = _trim_whitespace(working_df)
-    working_df = _normalize_name_columns(working_df, enable_ai, ai_normalizer)
-    working_df = _normalize_date_columns(working_df, enable_ai, ai_normalizer)
+    working_df = _normalize_name_columns(working_df)
+    working_df = _normalize_date_columns(working_df)
 
     pre_dedup_rows = len(working_df)
     working_df = working_df.drop_duplicates()
     duplicates_removed = pre_dedup_rows - len(working_df)
 
-    working_df, invalid_rows_removed = _validate_contacts(working_df)
+    working_df, invalid_contacts_cleared = _validate_contacts(working_df)
 
     working_df = working_df.reset_index(drop=True)
 
@@ -162,7 +147,7 @@ def _clean_dataframe(
         sheet_name="",
         initial_rows=initial_rows,
         duplicates_removed=duplicates_removed,
-        invalid_rows_removed=invalid_rows_removed,
+        invalid_contacts_cleared=invalid_contacts_cleared,
         final_rows=len(working_df),
     )
     return working_df, summary
@@ -180,11 +165,7 @@ def _trim_whitespace(df: pd.DataFrame) -> pd.DataFrame:
     return trimmed
 
 
-def _normalize_name_columns(
-    df: pd.DataFrame,
-    enable_ai: bool,
-    ai_normalizer: Optional[AINormalizer],
-) -> pd.DataFrame:
+def _normalize_name_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize columns that appear to contain name data."""
 
     normalized = df.copy()
@@ -196,35 +177,19 @@ def _normalize_name_columns(
     for col in name_cols:
         series = normalized[col].astype("string")
         normalized_values = series.fillna("").map(_smart_title_case)
-
-        if enable_ai and ai_normalizer:
-            ai_candidates = {
-                idx: value
-                for idx, value in series.items()
-                if _needs_ai_name_cleanup(value)
-            }
-            if ai_candidates:
-                suggestions = ai_normalizer.normalize_names(list(ai_candidates.values()))
-                for (idx, _), suggestion in zip(ai_candidates.items(), suggestions):
-                    normalized_values.loc[idx] = suggestion.strip()
-
         normalized[col] = normalized_values.replace("", pd.NA)
 
     return normalized
 
 
-def _normalize_date_columns(
-    df: pd.DataFrame,
-    enable_ai: bool,
-    ai_normalizer: Optional[AINormalizer],
-) -> pd.DataFrame:
+def _normalize_date_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Convert date-like values to ISO 8601 strings."""
 
     normalized = df.copy()
     candidate_cols = [
         col
         for col in normalized.columns
-        if _looks_like_date_column(normalized[col])
+        if "date" in str(col).lower()
     ]
 
     excel_origin = "1899-12-30"
@@ -254,25 +219,13 @@ def _normalize_date_columns(
         formatted.loc[mask_valid] = parsed.loc[mask_valid].dt.strftime("%Y-%m-%d")
         formatted = formatted.str.strip()
 
-        if enable_ai and ai_normalizer:
-            unresolved_mask = (~mask_valid) & series.notna() & series.astype("string").str.strip().ne("")
-            if unresolved_mask.any():
-                original_values = series.loc[unresolved_mask].astype("string").tolist()
-                ai_suggestions = ai_normalizer.normalize_dates(original_values)
-                reparsed = pd.to_datetime(ai_suggestions, errors="coerce", utc=False)
-                for idx, suggestion, parsed_value in zip(series.loc[unresolved_mask].index, ai_suggestions, reparsed):
-                    if pd.notna(parsed_value):
-                        formatted.loc[idx] = parsed_value.strftime("%Y-%m-%d")
-                    else:
-                        formatted.loc[idx] = suggestion.strip()
-
         normalized[col] = formatted.replace("", pd.NA)
 
     return normalized
 
 
 def _validate_contacts(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
-    """Validate email and phone columns, removing rows with invalid values."""
+    """Validate email and phone columns, clearing invalid values without dropping rows."""
 
     validated = df.copy()
     email_cols = [col for col in validated.columns if "email" in str(col).lower()]
@@ -282,32 +235,32 @@ def _validate_contacts(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
         if any(token in str(col).lower() for token in ("phone", "mobile", "contact", "tel"))
     ]
 
-    rows_to_drop = set()
-    col_updates: Dict[str, Dict[int, str]] = defaultdict(dict)
+    invalid_entries = 0
 
     for col in email_cols:
         series = validated[col]
         for idx, value in series.items():
             if _is_blank(value):
-                rows_to_drop.add(idx)
+                validated.loc[idx, col] = pd.NA
                 continue
             try:
                 normalized_email = validate_email(str(value), check_deliverability=False).email
             except EmailNotValidError:
-                rows_to_drop.add(idx)
+                validated.loc[idx, col] = pd.NA
+                invalid_entries += 1
             else:
-                col_updates[col][idx] = normalized_email
+                validated.loc[idx, col] = normalized_email
 
     for col in phone_cols:
         series = validated[col]
         for idx, value in series.items():
             if _is_blank(value):
-                rows_to_drop.add(idx)
+                validated.loc[idx, col] = pd.NA
                 continue
 
             sanitized = re.sub(r"[^\d+]", "", str(value))
-            parsed_number = None
 
+            parsed_number = None
             try:
                 parsed_number = phonenumbers.parse(sanitized, None)
             except NumberParseException:
@@ -317,59 +270,14 @@ def _validate_contacts(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
                     parsed_number = None
 
             if not parsed_number or not phonenumbers.is_valid_number(parsed_number):
-                rows_to_drop.add(idx)
+                validated.loc[idx, col] = pd.NA
+                invalid_entries += 1
                 continue
 
             formatted_number = phonenumbers.format_number(parsed_number, PhoneNumberFormat.E164)
-            col_updates[col][idx] = formatted_number
+            validated.loc[idx, col] = formatted_number
 
-    if rows_to_drop:
-        validated = validated.drop(index=list(rows_to_drop))
-
-    for col, updates in col_updates.items():
-        if not updates:
-            continue
-        valid_indices = [idx for idx in updates.keys() if idx not in rows_to_drop]
-        if valid_indices:
-            validated.loc[valid_indices, col] = [updates[idx] for idx in valid_indices]
-
-    return validated, len(rows_to_drop)
-
-
-def _looks_like_date_column(series: pd.Series) -> bool:
-    """Heuristic to determine if a column contains dates."""
-
-    if pd.api.types.is_datetime64_any_dtype(series):
-        return True
-
-    non_na_series = series.dropna()
-
-    if non_na_series.empty:
-        return False
-
-    numeric = pd.to_numeric(non_na_series, errors="coerce")
-    numeric = numeric.dropna()
-    if not numeric.empty:
-        plausible = numeric.between(59, 600000)  # Excel day numbers roughly through year 2600
-        if plausible.mean() >= 0.5:
-            return True
-
-    sample = non_na_series.astype("string").str.strip().head(25)
-    potential_matches = 0
-    for value in sample:
-        if not value:
-            continue
-        if re.search(r"\d{1,4}[^\w]{1}\d{1,2}[^\w]{1}\d{1,4}", value):
-            potential_matches += 1
-            continue
-        try:
-            date_parser.parse(value)
-        except (ValueError, OverflowError):
-            continue
-        else:
-            potential_matches += 1
-
-    return potential_matches >= max(1, len(sample) // 2)
+    return validated, invalid_entries
 
 
 def _smart_title_case(value: str) -> str:
@@ -395,20 +303,6 @@ def _smart_title_case(value: str) -> str:
         rebuilt_tokens.append(rebuilt)
 
     return " ".join(rebuilt_tokens)
-
-
-def _needs_ai_name_cleanup(value) -> bool:
-    """Determine whether a name value is a candidate for AI refinement."""
-
-    if _is_blank(value):
-        return False
-
-    text = str(value)
-    stripped = text.strip()
-    if not stripped:
-        return False
-
-    return stripped.islower() or stripped.isupper()
 
 
 def _is_blank(value) -> bool:
@@ -448,6 +342,7 @@ def _write_with_formatting(workbook, worksheet, df: pd.DataFrame) -> None:
             "align": "center" if is_header else "left",
             "valign": "vcenter",
             "font_name": "Gopher",
+            "font_size": 10,
         }
         if is_header:
             base.update(

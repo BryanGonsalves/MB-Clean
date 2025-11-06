@@ -5,5 +5,3 @@ openpyxl
 xlsxwriter
 email-validator
 phonenumbers
-python-dateutil
-openai

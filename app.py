@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import streamlit as st
 
 from cleaning import clean_workbook, export_cleaned_workbook, load_uploaded_data
-from cleaning.ai_normalize import AINormalizer, AIUnavailableError
 
 PAGE_TITLE = "MB-Clean"
 THEME_NAVY = "#0A1D44"
@@ -27,62 +25,64 @@ def configure_page() -> None:
                 background-color: #FFFFFF;
             }}
             .app-shell {{
-                border: 3px solid {THEME_NAVY};
+                border: 2px solid {THEME_NAVY};
                 padding: 1.5rem 2rem;
-                margin: 1.5rem auto;
-                max-width: 900px;
+                margin: 2rem auto;
+                max-width: 760px;
                 background-color: #FFFFFF;
+                box-shadow: 0 0 0 4px rgba(10, 29, 68, 0.06);
             }}
             .app-header {{
                 background-color: {THEME_NAVY};
                 color: #FFFFFF;
                 font-weight: 700;
                 text-align: center;
-                padding: 1rem;
-                margin-bottom: 1.5rem;
+                padding: 0.9rem 1rem;
+                margin-bottom: 1.25rem;
                 letter-spacing: 0.05rem;
+                border-radius: 2px;
             }}
             .section-title {{
                 font-weight: 600;
                 color: #000000;
-                margin-top: 1.5rem;
-                margin-bottom: 0.5rem;
-                text-align: center;
+                margin-top: 1.25rem;
+                margin-bottom: 0.25rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04rem;
             }}
             .body-text {{
                 margin-bottom: 0.75rem;
-                text-align: center;
+                color: #000000;
+                line-height: 1.5;
             }}
             .summary-box {{
                 border: 1px solid {THEME_NAVY};
-                padding: 1rem;
-                margin-top: 1rem;
+                padding: 1rem 1.25rem;
+                margin-top: 0.75rem;
                 color: #000000;
                 background-color: #FFFFFF;
-                text-align: center;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
+                border-radius: 2px;
             }}
-            .status-message {{
+            .summary-box ul {{
+                margin: 0.25rem 0 0 1rem;
+                padding: 0;
+                line-height: 1.5;
+            }}
+            .notice {{
                 border: 1px solid {THEME_NAVY};
-                padding: 0.75rem;
-                margin-top: 1rem;
+                padding: 0.75rem 1rem;
+                margin: 1rem 0;
                 color: #000000;
                 background-color: #FFFFFF;
-                text-align: center;
-                display: flex;
-                justify-content: center;
-                align-items: center;
+                border-radius: 2px;
             }}
-            .status-message.error {{
+            .notice.error {{
                 border-style: dashed;
             }}
             .footer {{
                 text-align: center;
                 color: #000000;
-                margin-top: 2rem;
+                margin-top: 1.5rem;
                 font-size: 10pt;
             }}
             div.stButton > button, div[data-testid="stDownloadButton"] > button {{
@@ -90,36 +90,20 @@ def configure_page() -> None:
                 color: #FFFFFF;
                 border: 1px solid {THEME_NAVY};
                 border-radius: 4px;
-                padding: 0.6rem 1.5rem;
+                padding: 0.55rem 1.5rem;
                 font-weight: 600;
+                letter-spacing: 0.02rem;
             }}
             div.stButton > button:hover, div[data-testid="stDownloadButton"] > button:hover {{
                 border-color: #000000;
+            }}
+            [data-testid="stFileUploaderDropzone"] {{
+                border: 1px solid {THEME_NAVY};
             }}
         </style>
         """,
         unsafe_allow_html=True,
     )
-
-
-def resolve_ai_normalizer(enable_ai: bool) -> tuple[Optional[AINormalizer], Optional[str]]:
-    if not enable_ai:
-        return None, None
-
-    api_key = None
-    if "OPENAI_API_KEY" in st.secrets:
-        api_key = st.secrets["OPENAI_API_KEY"]
-    if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
-
-    try:
-        if api_key:
-            return AINormalizer.from_api_key(api_key), None
-        return AINormalizer.from_env(), None
-    except AIUnavailableError as err:
-        return None, str(err)
-    except Exception:
-        return None, "AI normalization is currently unavailable."
 
 
 def render_footer() -> None:
@@ -129,34 +113,28 @@ def render_footer() -> None:
 def render_summary(summaries: Dict[str, Dict[str, int]]) -> None:
     total = summaries.get("TOTAL", {})
     duplicates = total.get("duplicates_removed", 0)
-    invalids = total.get("invalid_rows_removed", 0)
+    invalids = total.get("invalid_contacts_cleared", 0)
     final_rows = total.get("final_rows", 0)
 
-    messages = [
-        f"{duplicates} duplicate rows removed.",
-        f"{invalids} rows dropped due to invalid contact information.",
-        f"{final_rows} rows ready for download.",
+    primary_lines = [
+        f"{duplicates} duplicate rows removed",
+        f"{invalids} contact fields cleared",
+        f"{final_rows} rows ready for download",
     ]
 
-    detail_lines = []
-    for sheet_name, metrics in summaries.items():
-        if sheet_name == "TOTAL":
-            continue
-        detail_lines.append(
-            f"{sheet_name}: {metrics.get('duplicates_removed', 0)} duplicates removed, "
-            f"{metrics.get('invalid_rows_removed', 0)} invalid rows dropped, "
-            f"{metrics.get('final_rows', 0)} rows cleaned."
-        )
+    detail_lines = [
+        f"{sheet_name}: {metrics.get('final_rows', 0)} rows (duplicates removed {metrics.get('duplicates_removed', 0)}, contacts cleared {metrics.get('invalid_contacts_cleared', 0)})"
+        for sheet_name, metrics in summaries.items()
+        if sheet_name != "TOTAL"
+    ]
 
-    summary_text = " ".join(messages)
-    details_text = " ".join(detail_lines)
+    html = "<ul>" + "".join(f"<li>{line}</li>" for line in primary_lines) + "</ul>"
+    if detail_lines:
+        html += f"<hr style='border: none; border-top: 1px solid {THEME_NAVY}; margin: 0.6rem 0;'/>"
+        html += "<ul>" + "".join(f"<li>{line}</li>" for line in detail_lines) + "</ul>"
 
     st.markdown('<div class="section-title">Summary</div>', unsafe_allow_html=True)
-    st.markdown(
-        f'<div class="summary-box">{summary_text}'
-        f"{(' ' + details_text) if details_text else ''}</div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="summary-box">{html}</div>', unsafe_allow_html=True)
 
 
 def main() -> None:
@@ -168,12 +146,6 @@ def main() -> None:
         st.session_state["summaries"] = None
     if "source_name" not in st.session_state:
         st.session_state["source_name"] = None
-
-    st.sidebar.markdown("### Options")
-    ai_toggle = st.sidebar.toggle("Enable AI Normalization for Names and Dates", value=False)
-    ai_normalizer, ai_warning = resolve_ai_normalizer(ai_toggle)
-    if ai_warning:
-        st.sidebar.markdown(f'<div class="status-message">{ai_warning}</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="app-shell">', unsafe_allow_html=True)
     st.markdown('<div class="app-header">MB-Clean</div>', unsafe_allow_html=True)
@@ -192,8 +164,6 @@ def main() -> None:
                 sheets = load_uploaded_data(uploaded_file)
                 cleaned_sheets, summaries = clean_workbook(
                     sheets,
-                    enable_ai=ai_toggle and ai_normalizer is not None,
-                    ai_normalizer=ai_normalizer,
                 )
                 export_bytes = export_cleaned_workbook(cleaned_sheets)
         except Exception as exc:
@@ -201,7 +171,7 @@ def main() -> None:
             st.session_state["summaries"] = None
             st.session_state["source_name"] = None
             st.markdown(
-                f'<div class="status-message error">Unable to clean the file: {exc}</div>',
+                f'<div class="notice error">Unable to clean the file: {exc}</div>',
                 unsafe_allow_html=True,
             )
         else:
