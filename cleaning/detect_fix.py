@@ -10,13 +10,35 @@ from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
-from email_validator import EmailNotValidError, validate_email
-import phonenumbers
-from phonenumbers.phonenumberutil import NumberParseException, PhoneNumberFormat
 
 NA_COLOR = "#0A1D44"
 HEADER_FONT_COLOR = "#FFFFFF"
 BODY_FONT_COLOR = "#000000"
+REPORT_COLUMNS = [
+    "Sr. No.",
+    "PS Number",
+    "Student Full Name",
+    "Enty Label",
+    "Date of missed scheduled meeting",
+    "Reason for Missed Meeting",
+    "Date of rescheduled advising session (if applicable)",
+    "Mentor",
+    "ADEK Advisor",
+]
+MISSED_REQUIRED = [
+    "Student first",
+    "Student last",
+    "Enty Label",
+    "Date of missed scheduled meeting",
+    "Reason for Missed Meeting",
+    "Date of rescheduled advising session (if applicable)",
+]
+MASTER_REQUIRED = [
+    "Student Full Name",
+    "PS Number",
+    "Mentor",
+    "ADEK Advisor",
+]
 
 
 @dataclass
@@ -61,28 +83,122 @@ def load_uploaded_data(uploaded_file) -> Dict[str, pd.DataFrame]:
     return data
 
 
+def _normalize_label(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+
+def _resolve_column(df: pd.DataFrame, target_label: str) -> str:
+    normalized_target = _normalize_label(target_label)
+    for column in df.columns:
+        if _normalize_label(column) == normalized_target:
+            return column
+    raise KeyError(f"Missing required column '{target_label}'.")
+
+
+def _build_lookup_key(series: pd.Series) -> pd.Series:
+    return (
+        series.astype("string")
+        .fillna("")
+        .str.lower()
+        .str.strip()
+        .str.replace(r"\s+", " ", regex=True)
+    )
+
+
+def _build_full_name(first: pd.Series, last: pd.Series) -> pd.Series:
+    first_part = first.astype("string").fillna("").str.strip()
+    last_part = last.astype("string").fillna("").str.strip()
+    combined = (first_part + " " + last_part).str.replace(r"\s+", " ", regex=True).str.strip()
+    formatted = combined.map(_smart_title_case)
+    return formatted.replace("", pd.NA)
+
+
+def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFrame) -> pd.DataFrame:
+    if missed_df.empty:
+        return pd.DataFrame(columns=REPORT_COLUMNS)
+
+    working = missed_df.copy()
+    resolved_missed = {label: _resolve_column(working, label) for label in MISSED_REQUIRED}
+
+    working["Student Full Name"] = _build_full_name(
+        working[resolved_missed["Student first"]],
+        working[resolved_missed["Student last"]],
+    )
+
+    report_df = pd.DataFrame(index=working.index)
+    report_df["Sr. No."] = np.arange(1, len(working) + 1)
+    report_df["Student Full Name"] = working["Student Full Name"]
+    report_df["Enty Label"] = working[resolved_missed["Enty Label"]]
+    report_df["Date of missed scheduled meeting"] = working[resolved_missed["Date of missed scheduled meeting"]]
+    report_df["Reason for Missed Meeting"] = working[resolved_missed["Reason for Missed Meeting"]]
+    report_df["Date of rescheduled advising session (if applicable)"] = working[
+        resolved_missed["Date of rescheduled advising session (if applicable)"]
+    ]
+
+    resolved_master = {label: _resolve_column(master_df, label) for label in MASTER_REQUIRED}
+    lookup_df = master_df[
+        [
+            resolved_master["Student Full Name"],
+            resolved_master["PS Number"],
+            resolved_master["Mentor"],
+            resolved_master["ADEK Advisor"],
+        ]
+    ].copy()
+
+    rename_map = {
+        resolved_master["Student Full Name"]: "Student Full Name",
+        resolved_master["PS Number"]: "PS Number",
+        resolved_master["Mentor"]: "Mentor",
+        resolved_master["ADEK Advisor"]: "ADEK Advisor",
+    }
+    lookup_df = lookup_df.rename(columns=rename_map)
+    lookup_df["__lookup_key"] = _build_lookup_key(lookup_df["Student Full Name"])
+    lookup_df = lookup_df.drop_duplicates(subset="__lookup_key", keep="first")
+
+    report_df["__lookup_key"] = _build_lookup_key(report_df["Student Full Name"])
+    report_df = report_df.merge(
+        lookup_df[["__lookup_key", "PS Number", "Mentor", "ADEK Advisor"]],
+        on="__lookup_key",
+        how="left",
+    )
+    report_df = report_df.drop(columns="__lookup_key")
+
+    report_df = report_df.reindex(columns=REPORT_COLUMNS)
+    return report_df
+
+
 def clean_workbook(
-    sheets: Dict[str, pd.DataFrame],
+    missed_sheets: Dict[str, pd.DataFrame],
+    master_sheets: Dict[str, pd.DataFrame],
 ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict[str, int]]]:
-    """Clean every sheet in the uploaded workbook."""
+    """Create the missed session report and retain the original export sheet."""
 
-    cleaned_sheets: Dict[str, pd.DataFrame] = {}
-    summaries: Dict[str, Dict[str, int]] = {}
-    totals = SheetSummary(sheet_name="TOTAL", initial_rows=0, duplicates_removed=0, invalid_contacts_cleared=0, final_rows=0)
+    if not missed_sheets:
+        raise ValueError("Upload for the missed session export is required.")
+    if not master_sheets:
+        raise ValueError("Upload for the master data is required.")
 
-    for sheet_name, df in sheets.items():
-        cleaned_df, summary = _clean_dataframe(
-            df,
-        )
-        cleaned_sheets[sheet_name] = cleaned_df
-        summaries[sheet_name] = summary.as_dict
+    missed_name, missed_df = next(iter(missed_sheets.items()))
+    master_df = next(iter(master_sheets.values()))
 
-        totals.initial_rows += summary.initial_rows
-        totals.duplicates_removed += summary.duplicates_removed
-        totals.invalid_contacts_cleared += summary.invalid_contacts_cleared
-        totals.final_rows += summary.final_rows
+    report_df = _build_missed_session_report(missed_df, master_df)
 
-    summaries["TOTAL"] = totals.as_dict
+    cleaned_sheets: Dict[str, pd.DataFrame] = {
+        "Missed Sessions": report_df,
+        "Export": missed_df.copy(),
+    }
+
+    summary = SheetSummary(
+        sheet_name=missed_name,
+        initial_rows=len(missed_df),
+        duplicates_removed=0,
+        invalid_contacts_cleared=0,
+        final_rows=len(report_df),
+    )
+    summaries: Dict[str, Dict[str, int]] = {
+        "Missed Sessions": summary.as_dict,
+        "TOTAL": summary.as_dict,
+    }
     return cleaned_sheets, summaries
 
 
@@ -113,173 +229,6 @@ def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame]) -> bytes:
     return output.getvalue()
 
 
-def _clean_dataframe(
-    df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, SheetSummary]:
-    """Apply the full cleaning pipeline to a single DataFrame."""
-
-    working_df = df.copy()
-    initial_rows = len(working_df)
-
-    # Early exit for empty sheets.
-    if initial_rows == 0:
-        return working_df, SheetSummary(
-            sheet_name="",
-            initial_rows=0,
-            duplicates_removed=0,
-            invalid_contacts_cleared=0,
-            final_rows=0,
-        )
-
-    working_df = _trim_whitespace(working_df)
-    working_df = _normalize_name_columns(working_df)
-    working_df = _normalize_date_columns(working_df)
-
-    pre_dedup_rows = len(working_df)
-    working_df = working_df.drop_duplicates()
-    duplicates_removed = pre_dedup_rows - len(working_df)
-
-    working_df, invalid_contacts_cleared = _validate_contacts(working_df)
-
-    working_df = working_df.reset_index(drop=True)
-
-    summary = SheetSummary(
-        sheet_name="",
-        initial_rows=initial_rows,
-        duplicates_removed=duplicates_removed,
-        invalid_contacts_cleared=invalid_contacts_cleared,
-        final_rows=len(working_df),
-    )
-    return working_df, summary
-
-
-def _trim_whitespace(df: pd.DataFrame) -> pd.DataFrame:
-    """Strip leading/trailing whitespace from all string columns."""
-
-    trimmed = df.copy()
-    object_cols = trimmed.select_dtypes(include=["object", "string"]).columns
-
-    for col in object_cols:
-        trimmed[col] = trimmed[col].astype("string").str.strip()
-
-    return trimmed
-
-
-def _normalize_name_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize columns that appear to contain name data."""
-
-    normalized = df.copy()
-    name_cols = [col for col in normalized.columns if "name" in str(col).lower()]
-
-    if not name_cols:
-        return normalized
-
-    for col in name_cols:
-        series = normalized[col].astype("string")
-        normalized_values = series.fillna("").map(_smart_title_case)
-        normalized[col] = normalized_values.replace("", pd.NA)
-
-    return normalized
-
-
-def _normalize_date_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert date-like values to ISO 8601 strings."""
-
-    normalized = df.copy()
-    candidate_cols = [
-        col
-        for col in normalized.columns
-        if "date" in str(col).lower()
-    ]
-
-    excel_origin = "1899-12-30"
-
-    for col in candidate_cols:
-        series = normalized[col]
-        parsed = pd.to_datetime(series, errors="coerce", utc=False)
-
-        numeric_mask = parsed.isna() & series.notna()
-        if numeric_mask.any():
-            numeric_values = pd.to_numeric(series[numeric_mask], errors="coerce")
-            numeric_values = numeric_values.where(numeric_values.between(59, 600000))
-            excel_dates = pd.to_datetime(
-                numeric_values,
-                unit="D",
-                origin=excel_origin,
-                errors="coerce",
-            )
-            excel_valid = excel_dates.notna()
-            if excel_valid.any():
-                valid_idx = excel_dates.index[excel_valid]
-                parsed.loc[valid_idx] = excel_dates.loc[valid_idx]
-
-        mask_valid = parsed.notna()
-        formatted = series.astype("string")
-
-        formatted.loc[mask_valid] = parsed.loc[mask_valid].dt.strftime("%Y-%m-%d")
-        formatted = formatted.str.strip()
-
-        normalized[col] = formatted.replace("", pd.NA)
-
-    return normalized
-
-
-def _validate_contacts(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
-    """Validate email and phone columns, clearing invalid values without dropping rows."""
-
-    validated = df.copy()
-    email_cols = [col for col in validated.columns if "email" in str(col).lower()]
-    phone_cols = [
-        col
-        for col in validated.columns
-        if any(token in str(col).lower() for token in ("phone", "mobile", "contact", "tel"))
-    ]
-
-    invalid_entries = 0
-
-    for col in email_cols:
-        series = validated[col]
-        for idx, value in series.items():
-            if _is_blank(value):
-                validated.loc[idx, col] = pd.NA
-                continue
-            try:
-                normalized_email = validate_email(str(value), check_deliverability=False).email
-            except EmailNotValidError:
-                validated.loc[idx, col] = pd.NA
-                invalid_entries += 1
-            else:
-                validated.loc[idx, col] = normalized_email
-
-    for col in phone_cols:
-        series = validated[col]
-        for idx, value in series.items():
-            if _is_blank(value):
-                validated.loc[idx, col] = pd.NA
-                continue
-
-            sanitized = re.sub(r"[^\d+]", "", str(value))
-
-            parsed_number = None
-            try:
-                parsed_number = phonenumbers.parse(sanitized, None)
-            except NumberParseException:
-                try:
-                    parsed_number = phonenumbers.parse(sanitized, "US")
-                except NumberParseException:
-                    parsed_number = None
-
-            if not parsed_number or not phonenumbers.is_valid_number(parsed_number):
-                validated.loc[idx, col] = pd.NA
-                invalid_entries += 1
-                continue
-
-            formatted_number = phonenumbers.format_number(parsed_number, PhoneNumberFormat.E164)
-            validated.loc[idx, col] = formatted_number
-
-    return validated, invalid_entries
-
-
 def _smart_title_case(value: str) -> str:
     """Convert strings like names into title case while handling separators."""
 
@@ -303,14 +252,6 @@ def _smart_title_case(value: str) -> str:
         rebuilt_tokens.append(rebuilt)
 
     return " ".join(rebuilt_tokens)
-
-
-def _is_blank(value) -> bool:
-    """Check if a value should be considered blank."""
-
-    if pd.isna(value):
-        return True
-    return str(value).strip() == ""
 
 
 def _write_with_formatting(workbook, worksheet, df: pd.DataFrame) -> None:

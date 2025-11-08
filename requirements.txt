@@ -3,5 +3,3 @@ pandas
 numpy
 openpyxl
 xlsxwriter
-email-validator
-phonenumbers

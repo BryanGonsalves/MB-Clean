@@ -154,19 +154,29 @@ def main() -> None:
     st.markdown('<div class="app-header">MB-Clean</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">Upload</div>', unsafe_allow_html=True)
-    st.markdown('<div class="body-text">Upload an Excel or CSV file to begin cleaning.</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Upload an Excel or CSV file",
+    st.markdown(
+        '<div class="body-text">Upload the weekly missed session export and the master roster to build your report.</div>',
+        unsafe_allow_html=True,
+    )
+    missed_file = st.file_uploader(
+        "Missed session export",
         type=["xlsx", "xls", "csv"],
-        label_visibility="collapsed",
+        key="missed-upload",
+    )
+    master_file = st.file_uploader(
+        "Master student data",
+        type=["xlsx", "xls", "csv"],
+        key="master-upload",
     )
 
-    if uploaded_file is not None:
+    if missed_file is not None and master_file is not None:
         try:
-            with st.spinner("Cleaning in progress…"):
-                sheets = load_uploaded_data(uploaded_file)
+            with st.spinner("Building report…"):
+                missed_sheets = load_uploaded_data(missed_file)
+                master_sheets = load_uploaded_data(master_file)
                 cleaned_sheets, summaries = clean_workbook(
-                    sheets,
+                    missed_sheets,
+                    master_sheets,
                 )
                 export_bytes = export_cleaned_workbook(cleaned_sheets)
         except Exception as exc:
@@ -180,7 +190,12 @@ def main() -> None:
         else:
             st.session_state["export_bytes"] = export_bytes
             st.session_state["summaries"] = summaries
-            st.session_state["source_name"] = uploaded_file.name
+            st.session_state["source_name"] = missed_file.name
+    elif missed_file is not None or master_file is not None:
+        st.markdown(
+            "<div class='notice'>Please upload both files to generate the report.</div>",
+            unsafe_allow_html=True,
+        )
 
     if st.session_state["summaries"]:
         render_summary(st.session_state["summaries"])
