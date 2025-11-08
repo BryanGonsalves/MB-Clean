@@ -25,18 +25,18 @@ def configure_page() -> None:
                 background-color: #050505;
             }}
             .app-shell {{
-                background-color: #0E1420;
-                border-radius: 18px;
-                padding: 2.5rem;
-                margin: 2rem auto;
+                background-color: transparent;
+                border-radius: 0;
+                padding: 1.5rem 0;
+                margin: 1rem auto;
                 max-width: 820px;
-                box-shadow: 0 25px 50px rgba(0, 0, 0, 0.45);
+                box-shadow: none;
             }}
             .app-subhead {{
                 text-align: center;
                 color: #94A3B8;
                 font-size: 0.95rem;
-                margin-bottom: 1.5rem;
+                margin-bottom: 1rem;
             }}
             .section-title {{
                 font-weight: 600;
@@ -48,11 +48,11 @@ def configure_page() -> None:
                 font-size: 0.85rem;
             }}
             .upload-card {{
-                background-color: #0B101A;
-                border: 1px solid rgba(148, 163, 184, 0.3);
-                border-radius: 12px;
-                padding: 1rem;
-                min-height: 230px;
+                background-color: transparent;
+                border: none;
+                border-radius: 0;
+                padding: 0;
+                min-height: auto;
                 display: flex;
                 flex-direction: column;
                 gap: 0.5rem;
@@ -108,8 +108,8 @@ def configure_page() -> None:
                 background-color: #020617;
             }}
             [data-testid="stFileUploaderDropzone"] {{
-                border: 1px dashed rgba(148, 163, 184, 0.4);
-                background-color: #0E1420;
+                border: 1px dashed rgba(148, 163, 184, 0.25);
+                background-color: transparent;
             }}
         </style>
         """,
