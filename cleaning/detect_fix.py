@@ -37,12 +37,12 @@ MISSED_OPTIONAL = {
         "Date of rescheduled advising session (if applicable)"
     ],
 }
-MASTER_REQUIRED = [
-    "Student Full Name",
-    "PS Number",
-    "Mentor",
-    "ADEK Advisor",
-]
+MASTER_REQUIRED = {
+    "Student Full Name": ["Student Name"],
+    "PS Number": ["PS Number", "ADEK Applicant ID", "Application Number", "SMS Account"],
+    "Mentor": ["Mentor", "Current Mentor"],
+    "ADEK Advisor": ["ADEK Advisor"],
+}
 
 
 @dataclass
@@ -163,7 +163,10 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
     else:
         report_df["Date of rescheduled advising session (if applicable)"] = pd.Series(pd.NA, index=report_df.index)
 
-    resolved_master = {label: _resolve_column(master_df, label) for label in MASTER_REQUIRED}
+    resolved_master = {
+        label: _resolve_column(master_df, label, aliases, required=True)
+        for label, aliases in MASTER_REQUIRED.items()
+    }
     lookup_df = master_df[
         [
             resolved_master["Student Full Name"],
