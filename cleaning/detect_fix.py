@@ -198,6 +198,27 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
     return report_df
 
 
+def _select_sheet_with_columns(
+    sheets: Dict[str, pd.DataFrame],
+    required_map: Dict[str, Iterable[str]],
+) -> Tuple[str, pd.DataFrame]:
+    """Return the first sheet that contains all required columns (considering aliases)."""
+
+    last_error: Exception | None = None
+    for sheet_name, df in sheets.items():
+        try:
+            for label, aliases in required_map.items():
+                _resolve_column(df, label, aliases, required=True)
+        except KeyError as exc:
+            last_error = exc
+            continue
+        return sheet_name, df
+
+    if last_error:
+        raise last_error
+    raise KeyError("No sheet contains the required columns.")
+
+
 def clean_workbook(
     missed_sheets: Dict[str, pd.DataFrame],
     master_sheets: Dict[str, pd.DataFrame],
@@ -209,8 +230,8 @@ def clean_workbook(
     if not master_sheets:
         raise ValueError("Upload for the master data is required.")
 
-    missed_name, missed_df = next(iter(missed_sheets.items()))
-    master_df = next(iter(master_sheets.values()))
+    missed_name, missed_df = _select_sheet_with_columns(missed_sheets, MISSED_REQUIRED)
+    master_name, master_df = _select_sheet_with_columns(master_sheets, MASTER_REQUIRED)
 
     report_df = _build_missed_session_report(missed_df, master_df)
 
@@ -220,7 +241,7 @@ def clean_workbook(
     }
 
     summary = SheetSummary(
-        sheet_name=missed_name,
+        sheet_name=missed_name or "",
         initial_rows=len(missed_df),
         duplicates_removed=0,
         invalid_contacts_cleared=0,
