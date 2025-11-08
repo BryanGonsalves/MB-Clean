@@ -145,6 +145,21 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
         working[resolved_missed["Student last"]],
     )
 
+    entry_series = (
+        working[resolved_missed["Entry Label"]]
+        .astype("string")
+        .fillna("")
+        .str.strip()
+    )
+    include_mask = (
+        entry_series.str.contains(r"(?i)\bno\s*show\b", na=False)
+        | entry_series.str.contains(r"(?i)\bns\s*\d*\b", na=False)
+    )
+    working = working.loc[include_mask].reset_index(drop=True)
+
+    if working.empty:
+        return pd.DataFrame(columns=REPORT_COLUMNS)
+
     report_df = pd.DataFrame(index=working.index)
     report_df["Sr. No."] = np.arange(1, len(working) + 1)
     report_df["Student Full Name"] = working["Student Full Name"]
