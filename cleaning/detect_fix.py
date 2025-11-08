@@ -237,6 +237,8 @@ def _select_sheet_with_columns(
 def clean_workbook(
     missed_sheets: Dict[str, pd.DataFrame],
     master_sheets: Dict[str, pd.DataFrame],
+    *,
+    report_sheet_name: str | None = None,
 ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict[str, int]]]:
     """Create the missed session report and retain the original export sheet."""
 
@@ -250,8 +252,9 @@ def clean_workbook(
 
     report_df = _build_missed_session_report(missed_df, master_df)
 
+    sheet_label = report_sheet_name or "Missed Sessions"
     cleaned_sheets: Dict[str, pd.DataFrame] = {
-        "Missed Sessions": report_df,
+        sheet_label: report_df,
         "Export": missed_df.copy(),
     }
 

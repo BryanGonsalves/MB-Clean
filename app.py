@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple, Optional
 
 import streamlit as st
 
@@ -9,6 +10,24 @@ from cleaning import clean_workbook, export_cleaned_workbook, load_uploaded_data
 
 PAGE_TITLE = "MB-Clean"
 THEME_NAVY = "#0A1D44"
+
+
+def _format_export_artifacts(start: Optional[date], end: Optional[date]) -> Tuple[Optional[str], Optional[str]]:
+    if not start or not end:
+        return None, None
+    if end < start:
+        start, end = end, start
+
+    if start.month == end.month and start.year == end.year:
+        file_range = f"{start.strftime('%B')} {start.day} - {end.day}"
+        sheet_range = f"{start.day} - {end.day} {end.strftime('%b')}"
+    else:
+        file_range = f"{start.strftime('%B %d')} - {end.strftime('%B %d')}"
+        sheet_range = f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"
+
+    filename = f"Khotwa_Missed Sessions Report_ ({file_range}).xlsx"
+    sheet_name = f"Missed Session _{sheet_range}"
+    return filename, sheet_name
 
 
 def configure_page() -> None:
@@ -164,6 +183,13 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+    st.markdown('<div class="section-title">Report Window</div>', unsafe_allow_html=True)
+    date_col_start, date_col_end = st.columns(2, gap="large")
+    with date_col_start:
+        week_start = st.date_input("Week start", value=None, key="week-start")
+    with date_col_end:
+        week_end = st.date_input("Week end", value=None, key="week-end")
+
     st.markdown('<div class="section-title">Upload Files</div>', unsafe_allow_html=True)
     col_export, col_master = st.columns(2, gap="large")
     with col_export:
@@ -196,6 +222,8 @@ def main() -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
+    file_name_override, sheet_name_override = _format_export_artifacts(week_start, week_end)
+
     if missed_file is not None and master_file is not None:
         try:
             with st.spinner("Building report…"):
@@ -204,6 +232,7 @@ def main() -> None:
                 cleaned_sheets, summaries = clean_workbook(
                     missed_sheets,
                     master_sheets,
+                    report_sheet_name=sheet_name_override,
                 )
                 export_bytes = export_cleaned_workbook(cleaned_sheets)
         except Exception as exc:
@@ -217,7 +246,7 @@ def main() -> None:
         else:
             st.session_state["export_bytes"] = export_bytes
             st.session_state["summaries"] = summaries
-            st.session_state["source_name"] = missed_file.name
+            st.session_state["source_name"] = file_name_override or missed_file.name
     elif missed_file is not None or master_file is not None:
         st.markdown(
             "<div class='notice'>Please upload both files to generate the report.</div>",
@@ -227,7 +256,11 @@ def main() -> None:
     if st.session_state["summaries"]:
         render_summary(st.session_state["summaries"])
         st.markdown('<div class="section-title">Download</div>', unsafe_allow_html=True)
-        download_name = f"{Path(st.session_state['source_name']).stem}_cleaned.xlsx"
+        stored_name = st.session_state["source_name"] or "cleaned"
+        if stored_name.lower().endswith(".xlsx"):
+            download_name = stored_name
+        else:
+            download_name = f"{Path(stored_name).stem}_cleaned.xlsx"
         st.download_button(
             "Download Cleaned File",
             data=st.session_state["export_bytes"],
