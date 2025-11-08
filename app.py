@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
 import streamlit as st
 
-from cleaning import clean_workbook, export_cleaned_workbook, load_uploaded_data
+from cleaning import (clean_workbook, export_cleaned_workbook,
+                      load_uploaded_data)
 
 PAGE_TITLE = "MB-Clean"
 THEME_NAVY = "#0A1D44"
@@ -26,7 +27,7 @@ def _format_export_artifacts(start: Optional[date], end: Optional[date]) -> Tupl
         sheet_range = f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"
 
     filename = f"Khotwa_Missed Sessions Report_ ({file_range}).xlsx"
-    sheet_name = f"Missed Session _{sheet_range}"
+    sheet_name = f"Missed Session ({sheet_range})"
     return filename, sheet_name
 
 
