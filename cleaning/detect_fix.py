@@ -18,21 +18,25 @@ REPORT_COLUMNS = [
     "Sr. No.",
     "PS Number",
     "Student Full Name",
-    "Enty Label",
+    "Entry Label",
     "Date of missed scheduled meeting",
     "Reason for Missed Meeting",
     "Date of rescheduled advising session (if applicable)",
     "Mentor",
     "ADEK Advisor",
 ]
-MISSED_REQUIRED = [
-    "Student first",
-    "Student last",
-    "Enty Label",
-    "Date of missed scheduled meeting",
-    "Reason for Missed Meeting",
-    "Date of rescheduled advising session (if applicable)",
-]
+MISSED_REQUIRED = {
+    "Student first": ["Student first"],
+    "Student last": ["Student last"],
+    "Entry Label": ["Entry Label", "Entry label"],
+    "Date of missed scheduled meeting": ["Date of missed scheduled meeting", "Date"],
+}
+MISSED_OPTIONAL = {
+    "Reason for Missed Meeting": ["Reason for Missed Meeting"],
+    "Date of rescheduled advising session (if applicable)": [
+        "Date of rescheduled advising session (if applicable)"
+    ],
+}
 MASTER_REQUIRED = [
     "Student Full Name",
     "PS Number",
@@ -87,12 +91,21 @@ def _normalize_label(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", str(value).lower())
 
 
-def _resolve_column(df: pd.DataFrame, target_label: str) -> str:
-    normalized_target = _normalize_label(target_label)
+def _resolve_column(
+    df: pd.DataFrame,
+    target_label: str,
+    aliases: Iterable[str] | None = None,
+    *,
+    required: bool = True,
+) -> str | None:
+    candidates = list(aliases or []) + [target_label]
+    normalized_targets = {_normalize_label(label) for label in candidates}
     for column in df.columns:
-        if _normalize_label(column) == normalized_target:
+        if _normalize_label(column) in normalized_targets:
             return column
-    raise KeyError(f"Missing required column '{target_label}'.")
+    if required:
+        raise KeyError(f"Missing required column '{target_label}'.")
+    return None
 
 
 def _build_lookup_key(series: pd.Series) -> pd.Series:
@@ -118,7 +131,14 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
         return pd.DataFrame(columns=REPORT_COLUMNS)
 
     working = missed_df.copy()
-    resolved_missed = {label: _resolve_column(working, label) for label in MISSED_REQUIRED}
+    resolved_missed = {
+        label: _resolve_column(working, label, aliases, required=True)
+        for label, aliases in MISSED_REQUIRED.items()
+    }
+    optional_missed = {
+        label: _resolve_column(working, label, aliases, required=False)
+        for label, aliases in MISSED_OPTIONAL.items()
+    }
 
     working["Student Full Name"] = _build_full_name(
         working[resolved_missed["Student first"]],
@@ -128,12 +148,20 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
     report_df = pd.DataFrame(index=working.index)
     report_df["Sr. No."] = np.arange(1, len(working) + 1)
     report_df["Student Full Name"] = working["Student Full Name"]
-    report_df["Enty Label"] = working[resolved_missed["Enty Label"]]
+    report_df["Entry Label"] = working[resolved_missed["Entry Label"]]
     report_df["Date of missed scheduled meeting"] = working[resolved_missed["Date of missed scheduled meeting"]]
-    report_df["Reason for Missed Meeting"] = working[resolved_missed["Reason for Missed Meeting"]]
-    report_df["Date of rescheduled advising session (if applicable)"] = working[
-        resolved_missed["Date of rescheduled advising session (if applicable)"]
-    ]
+
+    reason_col = optional_missed["Reason for Missed Meeting"]
+    if reason_col:
+        report_df["Reason for Missed Meeting"] = working[reason_col]
+    else:
+        report_df["Reason for Missed Meeting"] = pd.Series(pd.NA, index=report_df.index)
+
+    rescheduled_col = optional_missed["Date of rescheduled advising session (if applicable)"]
+    if rescheduled_col:
+        report_df["Date of rescheduled advising session (if applicable)"] = working[rescheduled_col]
+    else:
+        report_df["Date of rescheduled advising session (if applicable)"] = pd.Series(pd.NA, index=report_df.index)
 
     resolved_master = {label: _resolve_column(master_df, label) for label in MASTER_REQUIRED}
     lookup_df = master_df[
