@@ -21,43 +21,35 @@ def configure_page() -> None:
             html, body, [data-testid="stAppViewContainer"], [data-testid="block-container"] {{
                 font-family: 'Gopher', sans-serif;
                 font-size: 10pt;
-                color: #0F172A;
-                background-color: #F4F6FB;
+                color: #E2E8F0;
+                background-color: #050505;
             }}
             .app-shell {{
-                background-color: #FFFFFF;
-                border-radius: 16px;
-                padding: 2rem 2.5rem;
+                background-color: #0E1420;
+                border-radius: 18px;
+                padding: 2.5rem;
                 margin: 2rem auto;
                 max-width: 820px;
-                box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
-            }}
-            .app-header {{
-                color: {THEME_NAVY};
-                font-weight: 700;
-                text-align: center;
-                font-size: 1.5rem;
-                margin-bottom: 0.4rem;
-                letter-spacing: 0.02rem;
+                box-shadow: 0 25px 50px rgba(0, 0, 0, 0.45);
             }}
             .app-subhead {{
                 text-align: center;
-                color: #475569;
+                color: #94A3B8;
                 font-size: 0.95rem;
                 margin-bottom: 1.5rem;
             }}
             .section-title {{
                 font-weight: 600;
-                color: #0F172A;
+                color: #F8FAFC;
                 margin-top: 1.5rem;
                 margin-bottom: 0.5rem;
                 text-transform: uppercase;
-                letter-spacing: 0.04rem;
+                letter-spacing: 0.08rem;
                 font-size: 0.85rem;
             }}
             .upload-card {{
-                background-color: #F8FAFF;
-                border: 1px solid rgba(10, 29, 68, 0.12);
+                background-color: #0B101A;
+                border: 1px solid rgba(148, 163, 184, 0.3);
                 border-radius: 12px;
                 padding: 1rem;
                 min-height: 230px;
@@ -68,19 +60,19 @@ def configure_page() -> None:
             .upload-title {{
                 font-weight: 600;
                 font-size: 1rem;
-                color: #0F172A;
+                color: #F8FAFC;
             }}
             .upload-body {{
-                color: #475569;
+                color: #94A3B8;
                 font-size: 0.9rem;
                 line-height: 1.4;
             }}
             .summary-box {{
-                border: 1px solid rgba(10, 29, 68, 0.18);
+                border: 1px solid rgba(148, 163, 184, 0.25);
                 padding: 1rem 1.25rem;
                 margin-top: 0.75rem;
-                color: #0F172A;
-                background-color: #FFFFFF;
+                color: #F8FAFC;
+                background-color: #0B101A;
                 border-radius: 12px;
                 text-align: center;
             }}
@@ -89,25 +81,22 @@ def configure_page() -> None:
                 line-height: 1.45;
             }}
             .notice {{
-                border: 1px solid rgba(10, 29, 68, 0.3);
+                border: 1px solid rgba(148, 163, 184, 0.4);
                 padding: 0.9rem 1rem;
                 margin: 1rem 0;
-                color: #0F172A;
-                background-color: #FFFFFF;
+                color: #F8FAFC;
+                background-color: #0B101A;
                 border-radius: 12px;
                 text-align: center;
             }}
-            .notice.error {{
-                border-style: dashed;
-            }}
             .footer {{
                 text-align: center;
-                color: #475569;
+                color: #64748B;
                 margin-top: 1.5rem;
                 font-size: 10pt;
             }}
             div.stButton > button, div[data-testid="stDownloadButton"] > button {{
-                background-color: {THEME_NAVY};
+                background-color: #1E293B;
                 color: #FFFFFF;
                 border: none;
                 border-radius: 999px;
@@ -116,11 +105,11 @@ def configure_page() -> None:
                 letter-spacing: 0.01rem;
             }}
             div.stButton > button:hover, div[data-testid="stDownloadButton"] > button:hover {{
-                background-color: #020817;
+                background-color: #020617;
             }}
             [data-testid="stFileUploaderDropzone"] {{
-                border: 1px dashed rgba(10, 29, 68, 0.35);
-                background-color: #FFFFFF;
+                border: 1px dashed rgba(148, 163, 184, 0.4);
+                background-color: #0E1420;
             }}
         </style>
         """,
@@ -170,9 +159,8 @@ def main() -> None:
         st.session_state["source_name"] = None
 
     st.markdown('<div class="app-shell">', unsafe_allow_html=True)
-    st.markdown('<div class="app-header">MB-Clean</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="app-subhead">Generate the weekly missed-session report with one upload.</div>',
+        '<div class="app-subhead"><strong>MB-Clean</strong> · Generate the weekly missed-session report with one upload.</div>',
         unsafe_allow_html=True,
     )
 
