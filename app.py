@@ -21,49 +21,67 @@ def configure_page() -> None:
             html, body, [data-testid="stAppViewContainer"], [data-testid="block-container"] {{
                 font-family: 'Gopher', sans-serif;
                 font-size: 10pt;
-                color: #000000;
-                background-color: #FFFFFF;
+                color: #0F172A;
+                background-color: #F4F6FB;
             }}
             .app-shell {{
-                border: 2px solid {THEME_NAVY};
-                padding: 1.5rem 2rem;
-                margin: 2rem auto;
-                max-width: 760px;
                 background-color: #FFFFFF;
-                box-shadow: 0 0 0 4px rgba(10, 29, 68, 0.06);
+                border-radius: 16px;
+                padding: 2rem 2.5rem;
+                margin: 2rem auto;
+                max-width: 820px;
+                box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
             }}
             .app-header {{
-                background-color: {THEME_NAVY};
-                color: #FFFFFF;
+                color: {THEME_NAVY};
                 font-weight: 700;
                 text-align: center;
-                padding: 0.9rem 1rem;
-                margin-bottom: 1.25rem;
-                letter-spacing: 0.05rem;
-                border-radius: 2px;
+                font-size: 1.5rem;
+                margin-bottom: 0.4rem;
+                letter-spacing: 0.02rem;
+            }}
+            .app-subhead {{
+                text-align: center;
+                color: #475569;
+                font-size: 0.95rem;
+                margin-bottom: 1.5rem;
             }}
             .section-title {{
                 font-weight: 600;
-                color: #000000;
-                margin-top: 1.25rem;
-                margin-bottom: 0.25rem;
+                color: #0F172A;
+                margin-top: 1.5rem;
+                margin-bottom: 0.5rem;
                 text-transform: uppercase;
                 letter-spacing: 0.04rem;
-                text-align: center;
+                font-size: 0.85rem;
             }}
-            .body-text {{
-                margin-bottom: 0.75rem;
-                color: #000000;
-                line-height: 1.5;
-                text-align: center;
+            .upload-card {{
+                background-color: #F8FAFF;
+                border: 1px solid rgba(10, 29, 68, 0.12);
+                border-radius: 12px;
+                padding: 1rem;
+                min-height: 230px;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }}
+            .upload-title {{
+                font-weight: 600;
+                font-size: 1rem;
+                color: #0F172A;
+            }}
+            .upload-body {{
+                color: #475569;
+                font-size: 0.9rem;
+                line-height: 1.4;
             }}
             .summary-box {{
-                border: 1px solid {THEME_NAVY};
+                border: 1px solid rgba(10, 29, 68, 0.18);
                 padding: 1rem 1.25rem;
                 margin-top: 0.75rem;
-                color: #000000;
+                color: #0F172A;
                 background-color: #FFFFFF;
-                border-radius: 2px;
+                border-radius: 12px;
                 text-align: center;
             }}
             .summary-line {{
@@ -71,12 +89,12 @@ def configure_page() -> None:
                 line-height: 1.45;
             }}
             .notice {{
-                border: 1px solid {THEME_NAVY};
-                padding: 0.75rem 1rem;
+                border: 1px solid rgba(10, 29, 68, 0.3);
+                padding: 0.9rem 1rem;
                 margin: 1rem 0;
-                color: #000000;
+                color: #0F172A;
                 background-color: #FFFFFF;
-                border-radius: 2px;
+                border-radius: 12px;
                 text-align: center;
             }}
             .notice.error {{
@@ -84,24 +102,25 @@ def configure_page() -> None:
             }}
             .footer {{
                 text-align: center;
-                color: #000000;
+                color: #475569;
                 margin-top: 1.5rem;
                 font-size: 10pt;
             }}
             div.stButton > button, div[data-testid="stDownloadButton"] > button {{
                 background-color: {THEME_NAVY};
                 color: #FFFFFF;
-                border: 1px solid {THEME_NAVY};
-                border-radius: 4px;
-                padding: 0.55rem 1.5rem;
+                border: none;
+                border-radius: 999px;
+                padding: 0.65rem 1.75rem;
                 font-weight: 600;
-                letter-spacing: 0.02rem;
+                letter-spacing: 0.01rem;
             }}
             div.stButton > button:hover, div[data-testid="stDownloadButton"] > button:hover {{
-                border-color: #000000;
+                background-color: #020817;
             }}
             [data-testid="stFileUploaderDropzone"] {{
-                border: 1px solid {THEME_NAVY};
+                border: 1px dashed rgba(10, 29, 68, 0.35);
+                background-color: #FFFFFF;
             }}
         </style>
         """,
@@ -152,22 +171,42 @@ def main() -> None:
 
     st.markdown('<div class="app-shell">', unsafe_allow_html=True)
     st.markdown('<div class="app-header">MB-Clean</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="section-title">Upload</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="body-text">Upload the weekly missed session export and the master roster to build your report.</div>',
+        '<div class="app-subhead">Generate the weekly missed-session report with one upload.</div>',
         unsafe_allow_html=True,
     )
-    missed_file = st.file_uploader(
-        "Missed session export",
-        type=["xlsx", "xls", "csv"],
-        key="missed-upload",
-    )
-    master_file = st.file_uploader(
-        "Master student data",
-        type=["xlsx", "xls", "csv"],
-        key="master-upload",
-    )
+
+    st.markdown('<div class="section-title">Upload Files</div>', unsafe_allow_html=True)
+    col_export, col_master = st.columns(2, gap="large")
+    with col_export:
+        st.markdown("<div class='upload-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='upload-title'>Missed Session Export</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='upload-body'>Upload the weekly missed-session export exactly as you download it.</div>",
+            unsafe_allow_html=True,
+        )
+        missed_file = st.file_uploader(
+            "Missed session export",
+            type=["xlsx", "xls", "csv"],
+            key="missed-upload",
+            label_visibility="collapsed",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_master:
+        st.markdown("<div class='upload-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='upload-title'>Master Student Data</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='upload-body'>Upload the master roster that contains PS Number, mentor, and ADEK advisor.</div>",
+            unsafe_allow_html=True,
+        )
+        master_file = st.file_uploader(
+            "Master student data",
+            type=["xlsx", "xls", "csv"],
+            key="master-upload",
+            label_visibility="collapsed",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if missed_file is not None and master_file is not None:
         try:
