@@ -288,9 +288,12 @@ def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame]) -> bytes:
                 else "Cleaned Data"
             )
             final_name = _unique_sheet_name(sheet_name, used_names)
-            worksheet = workbook.add_worksheet(final_name)
-            writer.sheets[final_name] = worksheet
-            _write_with_formatting(workbook, worksheet, df)
+            if original_name == "Export":
+                df.to_excel(writer, sheet_name=final_name, index=False)
+            else:
+                worksheet = workbook.add_worksheet(final_name)
+                writer.sheets[final_name] = worksheet
+                _write_with_formatting(workbook, worksheet, df)
 
     output.seek(0)
     return output.getvalue()
