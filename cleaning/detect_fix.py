@@ -303,7 +303,7 @@ def clean_workbook(
     return cleaned_sheets, summaries
 
 
-def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame]) -> bytes:
+def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame], *, summary_title: str | None = None) -> bytes:
     """Write cleaned sheets to an Excel workbook with the prescribed formatting."""
 
     if not cleaned_sheets:
@@ -314,6 +314,12 @@ def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame]) -> bytes:
         workbook = writer.book
         sheet_count = len(cleaned_sheets)
         used_names: set[str] = set()
+
+        if summary_title:
+            summary_name = _unique_sheet_name("Summary", used_names)
+            worksheet = workbook.add_worksheet(summary_name)
+            writer.sheets[summary_name] = worksheet
+            _write_summary_sheet(workbook, worksheet, summary_title)
 
         for original_name, df in cleaned_sheets.items():
             sheet_name = (
@@ -476,3 +482,22 @@ def _unique_sheet_name(name: str, used_names: set[str]) -> str:
 
     used_names.add(candidate)
     return candidate
+
+
+def _write_summary_sheet(workbook, worksheet, title: str) -> None:
+    """Render a simple summary header at B2:F2."""
+
+    fmt = workbook.add_format(
+        {
+            "align": "center",
+            "valign": "vcenter",
+            "font_name": "Gopher",
+            "font_size": 16,
+            "bold": True,
+            "font_color": HEADER_FONT_COLOR,
+            "bg_color": NA_COLOR,
+        }
+    )
+    worksheet.merge_range(1, 1, 1, 5, title, fmt)
+    worksheet.set_row(1, 28)
+    worksheet.set_column(1, 5, 22)

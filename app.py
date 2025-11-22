@@ -13,9 +13,21 @@ PAGE_TITLE = "MB-Clean"
 THEME_NAVY = "#0A1D44"
 
 
-def _format_export_artifacts(start: Optional[date], end: Optional[date]) -> Tuple[Optional[str], Optional[str]]:
+def _ordinal(n: int) -> str:
+    suffix = "th"
+    if n % 100 not in (11, 12, 13):
+        if n % 10 == 1:
+            suffix = "st"
+        elif n % 10 == 2:
+            suffix = "nd"
+        elif n % 10 == 3:
+            suffix = "rd"
+    return f"{n}{suffix}"
+
+
+def _format_export_artifacts(start: Optional[date], end: Optional[date]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     if not start or not end:
-        return None, None
+        return None, None, None
     if end < start:
         start, end = end, start
 
@@ -26,9 +38,12 @@ def _format_export_artifacts(start: Optional[date], end: Optional[date]) -> Tupl
         file_range = f"{start.strftime('%B %d')} - {end.strftime('%B %d')}"
         sheet_range = f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"
 
+    summary_range = f"{_ordinal(start.day)} to {_ordinal(end.day)} {end.strftime('%B')}"
+
     filename = f"Khotwa_Missed Sessions Report_ ({file_range}).xlsx"
     sheet_name = f"Missed Session ({sheet_range})"
-    return filename, sheet_name
+    summary_title = f"Missed Mentor Sessions - {summary_range}"
+    return filename, sheet_name, summary_title
 
 
 def configure_page() -> None:
@@ -223,7 +238,7 @@ def main() -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    file_name_override, sheet_name_override = _format_export_artifacts(week_start, week_end)
+    file_name_override, sheet_name_override, summary_title = _format_export_artifacts(week_start, week_end)
 
     if missed_file is not None and master_file is not None:
         try:
@@ -235,7 +250,7 @@ def main() -> None:
                     master_sheets,
                     report_sheet_name=sheet_name_override,
                 )
-                export_bytes = export_cleaned_workbook(cleaned_sheets)
+                export_bytes = export_cleaned_workbook(cleaned_sheets, summary_title=summary_title)
         except Exception as exc:
             st.session_state["export_bytes"] = None
             st.session_state["summaries"] = None
