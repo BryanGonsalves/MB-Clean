@@ -18,8 +18,8 @@ REPORT_COLUMNS = [
     "Sr. No.",
     "PS Number",
     "Student Full Name",
-    "Entry Label",
     "Standardized Entry Label",
+    "Entry Label",
     "Date of missed scheduled meeting",
     "Reason for Missed Meeting",
     "Date of rescheduled advising session (if applicable)",
@@ -193,8 +193,8 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
     report_df = pd.DataFrame(index=working.index)
     report_df["Sr. No."] = np.arange(1, len(working) + 1)
     report_df["Student Full Name"] = working["Student Full Name"]
-    report_df["Entry Label"] = working[resolved_missed["Entry Label"]]
     report_df["Standardized Entry Label"] = working["Standardized Entry Label"]
+    report_df["Entry Label"] = working[resolved_missed["Entry Label"]]
     report_df["Date of missed scheduled meeting"] = working[resolved_missed["Date of missed scheduled meeting"]]
 
     reason_col = optional_missed["Reason for Missed Meeting"]
