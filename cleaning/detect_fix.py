@@ -38,6 +38,12 @@ MISSED_OPTIONAL = {
         "Date of rescheduled advising session (if applicable)"
     ],
 }
+MEETING_REQUIRED = {
+    "Student first": ["Student first"],
+    "Student last": ["Student last"],
+    "Meeting Title": ["Meeting Title"],
+    "Meeting Notes": ["Meeting Notes"],
+}
 MASTER_REQUIRED = {
     "Student Full Name": ["Student Name"],
     "PS Number": ["PS Number", "ADEK Applicant ID", "Application Number", "SMS Account"],
@@ -154,7 +160,11 @@ def _standardize_entry_label(value: str) -> str:
     return " ".join(parts)
 
 
-def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFrame) -> pd.DataFrame:
+def _build_missed_session_report(
+    missed_df: pd.DataFrame,
+    master_df: pd.DataFrame,
+    meeting_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     if missed_df.empty:
         return pd.DataFrame(columns=REPORT_COLUMNS)
 
@@ -240,6 +250,49 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
     )
     report_df = report_df.drop(columns="__lookup_key")
 
+    if meeting_df is not None:
+        resolved_meeting = {
+            label: _resolve_column(meeting_df, label, aliases, required=True)
+            for label, aliases in MEETING_REQUIRED.items()
+        }
+        meeting_working = meeting_df.copy()
+        meeting_working["__meeting_full_name"] = _build_full_name(
+            meeting_working[resolved_meeting["Student first"]],
+            meeting_working[resolved_meeting["Student last"]],
+        )
+        meeting_working["__meeting_key"] = _build_lookup_key(
+            meeting_working["__meeting_full_name"].astype("string").fillna("")
+            + " "
+            + meeting_working[resolved_meeting["Meeting Title"]].astype("string").fillna("")
+        )
+        meeting_lookup = meeting_working[
+            ["__meeting_key", resolved_meeting["Meeting Notes"]]
+        ].rename(columns={resolved_meeting["Meeting Notes"]: "Meeting Notes"})
+        meeting_lookup = meeting_lookup.dropna(subset=["__meeting_key"])
+        meeting_lookup = meeting_lookup.drop_duplicates(subset="__meeting_key", keep="first")
+
+        report_df["__meeting_key"] = _build_lookup_key(
+            report_df["Student Full Name"].astype("string").fillna("")
+            + " "
+            + report_df["Entry Label"].astype("string").fillna("")
+        )
+        report_df = report_df.merge(
+            meeting_lookup,
+            left_on="__meeting_key",
+            right_on="__meeting_key",
+            how="left",
+        )
+        report_df = report_df.drop(columns="__meeting_key")
+
+        # Prefer Meeting Notes; fall back to optional reason column if it existed.
+        if "Meeting Notes" in report_df.columns:
+            base_reason = report_df["Meeting Notes"]
+            if "Reason for Missed Meeting" in report_df.columns:
+                report_df["Reason for Missed Meeting"] = base_reason.combine_first(report_df["Reason for Missed Meeting"])
+            else:
+                report_df["Reason for Missed Meeting"] = base_reason
+            report_df = report_df.drop(columns=["Meeting Notes"])
+
     report_df = report_df.reindex(columns=REPORT_COLUMNS)
     return report_df
 
@@ -268,6 +321,7 @@ def _select_sheet_with_columns(
 def clean_workbook(
     missed_sheets: Dict[str, pd.DataFrame],
     master_sheets: Dict[str, pd.DataFrame],
+    meeting_sheets: Dict[str, pd.DataFrame] | None = None,
     *,
     report_sheet_name: str | None = None,
 ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict[str, int]]]:
@@ -277,11 +331,14 @@ def clean_workbook(
         raise ValueError("Upload for the missed session export is required.")
     if not master_sheets:
         raise ValueError("Upload for the master data is required.")
+    if meeting_sheets is None:
+        raise ValueError("Upload for the meeting report is required.")
 
     missed_name, missed_df = _select_sheet_with_columns(missed_sheets, MISSED_REQUIRED)
     master_name, master_df = _select_sheet_with_columns(master_sheets, MASTER_REQUIRED)
+    meeting_name, meeting_df = _select_sheet_with_columns(meeting_sheets, MEETING_REQUIRED)
 
-    report_df = _build_missed_session_report(missed_df, master_df)
+    report_df = _build_missed_session_report(missed_df, master_df, meeting_df)
 
     sheet_label = report_sheet_name or "Missed Sessions"
     cleaned_sheets: Dict[str, pd.DataFrame] = {

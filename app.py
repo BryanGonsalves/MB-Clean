@@ -238,16 +238,30 @@ def main() -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="section-title">Meeting Report</div>', unsafe_allow_html=True)
+    st.markdown(
+        "<div class='upload-body'>Upload the meeting report to populate the reason for missed session from meeting notes.</div>",
+        unsafe_allow_html=True,
+    )
+    meeting_file = st.file_uploader(
+        "Meeting report",
+        type=["xlsx", "xls", "csv"],
+        key="meeting-upload",
+        label_visibility="collapsed",
+    )
+
     file_name_override, sheet_name_override, summary_title = _format_export_artifacts(week_start, week_end)
 
-    if missed_file is not None and master_file is not None:
+    if missed_file is not None and master_file is not None and meeting_file is not None:
         try:
             with st.spinner("Building report…"):
                 missed_sheets = load_uploaded_data(missed_file)
                 master_sheets = load_uploaded_data(master_file)
+                meeting_sheets = load_uploaded_data(meeting_file)
                 cleaned_sheets, summaries = clean_workbook(
                     missed_sheets,
                     master_sheets,
+                    meeting_sheets,
                     report_sheet_name=sheet_name_override,
                 )
                 export_bytes = export_cleaned_workbook(cleaned_sheets, summary_title=summary_title)
@@ -263,9 +277,9 @@ def main() -> None:
             st.session_state["export_bytes"] = export_bytes
             st.session_state["summaries"] = summaries
             st.session_state["source_name"] = file_name_override or missed_file.name
-    elif missed_file is not None or master_file is not None:
+    elif missed_file is not None or master_file is not None or meeting_file is not None:
         st.markdown(
-            "<div class='notice'>Please upload both files to generate the report.</div>",
+            "<div class='notice'>Please upload all three files (missed session export, master roster, meeting report) to generate the report.</div>",
             unsafe_allow_html=True,
         )
 
