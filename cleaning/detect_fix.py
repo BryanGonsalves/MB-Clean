@@ -19,6 +19,7 @@ REPORT_COLUMNS = [
     "PS Number",
     "Student Full Name",
     "Entry Label",
+    "Standardized Entry Label",
     "Date of missed scheduled meeting",
     "Reason for Missed Meeting",
     "Date of rescheduled advising session (if applicable)",
@@ -126,6 +127,33 @@ def _build_full_name(first: pd.Series, last: pd.Series) -> pd.Series:
     return formatted.replace("", pd.NA)
 
 
+def _standardize_entry_label(value: str) -> str:
+    raw = (value or "").strip()
+    lowered = raw.lower()
+
+    if "no" not in lowered and "ns" not in lowered:
+        return raw
+
+    number = None
+    num_match = re.search(r"(?:ns|no\s*show)\s*([0-9])", lowered)
+    if num_match:
+        number = num_match.group(1)
+
+    tag = None
+    if re.search(r"\btl\b|team\s*lead", lowered):
+        tag = "TL"
+    elif re.search(r"\baa\b", lowered):
+        tag = "AA"
+
+    parts = ["No Show"]
+    if number:
+        parts.append(number)
+    if tag:
+        parts.append(tag)
+
+    return " ".join(parts)
+
+
 def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFrame) -> pd.DataFrame:
     if missed_df.empty:
         return pd.DataFrame(columns=REPORT_COLUMNS)
@@ -160,10 +188,13 @@ def _build_missed_session_report(missed_df: pd.DataFrame, master_df: pd.DataFram
     if working.empty:
         return pd.DataFrame(columns=REPORT_COLUMNS)
 
+    working["Standardized Entry Label"] = working[resolved_missed["Entry Label"]].map(_standardize_entry_label)
+
     report_df = pd.DataFrame(index=working.index)
     report_df["Sr. No."] = np.arange(1, len(working) + 1)
     report_df["Student Full Name"] = working["Student Full Name"]
     report_df["Entry Label"] = working[resolved_missed["Entry Label"]]
+    report_df["Standardized Entry Label"] = working["Standardized Entry Label"]
     report_df["Date of missed scheduled meeting"] = working[resolved_missed["Date of missed scheduled meeting"]]
 
     reason_col = optional_missed["Reason for Missed Meeting"]
