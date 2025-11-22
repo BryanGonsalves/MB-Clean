@@ -259,9 +259,9 @@ def main() -> None:
                 master_sheets = load_uploaded_data(master_file)
                 meeting_sheets = load_uploaded_data(meeting_file)
                 cleaned_sheets, summaries = clean_workbook(
-                    missed_sheets,
-                    master_sheets,
-                    meeting_sheets,
+                    missed_sheets=missed_sheets,
+                    master_sheets=master_sheets,
+                    meeting_sheets=meeting_sheets,
                     report_sheet_name=sheet_name_override,
                 )
                 export_bytes = export_cleaned_workbook(cleaned_sheets, summary_title=summary_title)

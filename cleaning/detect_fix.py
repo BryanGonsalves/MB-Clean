@@ -318,7 +318,7 @@ def _select_sheet_with_columns(
     raise KeyError("No sheet contains the required columns.")
 
 
-def clean_workbook(
+def _clean_workbook_impl(
     missed_sheets: Dict[str, pd.DataFrame],
     master_sheets: Dict[str, pd.DataFrame],
     meeting_sheets: Dict[str, pd.DataFrame] | None = None,
@@ -358,6 +358,49 @@ def clean_workbook(
         "TOTAL": summary.as_dict,
     }
     return cleaned_sheets, summaries
+
+
+def clean_workbook(*args, **kwargs):
+    """Compatibility wrapper for `clean_workbook`.
+
+    Accepts both positional and keyword arguments so callers that pass
+    positional parameters (old code or accidental positional calls) won't
+    fail with a positional-argument mismatch.
+
+    Expected parameter names (keyword form):
+      - missed_sheets
+      - master_sheets
+      - meeting_sheets (optional)
+      - report_sheet_name (keyword-only / optional)
+
+    The wrapper normalizes positional args into the proper parameters and
+    forwards to the real implementation `_clean_workbook_impl`.
+    """
+
+    # Map positional args to named parameters
+    missed = None
+    master = None
+    meeting = None
+
+    if len(args) >= 1:
+        missed = args[0]
+    if len(args) >= 2:
+        master = args[1]
+    if len(args) >= 3:
+        meeting = args[2]
+
+    # Override with kwargs if provided
+    if "missed_sheets" in kwargs:
+        missed = kwargs.pop("missed_sheets")
+    if "master_sheets" in kwargs:
+        master = kwargs.pop("master_sheets")
+    if "meeting_sheets" in kwargs:
+        meeting = kwargs.pop("meeting_sheets")
+
+    report_sheet_name = kwargs.pop("report_sheet_name", None)
+
+    # Any remaining kwargs are unexpected; let the underlying impl raise if needed.
+    return _clean_workbook_impl(missed, master, meeting, report_sheet_name=report_sheet_name)
 
 
 def export_cleaned_workbook(cleaned_sheets: Dict[str, pd.DataFrame], *, summary_title: str | None = None) -> bytes:
