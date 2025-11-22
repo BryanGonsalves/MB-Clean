@@ -156,55 +156,31 @@ def render_footer() -> None:
     st.markdown('<div class="footer">Internal Use Only – Mindbase</div>', unsafe_allow_html=True)
 
 
-def render_summary(summaries: Dict[str, Dict[str, int]], filename: str | None, start: Optional[date], end: Optional[date]) -> None:
-    """Render an email template containing the summary counts and the report period.
-
-    Displays a copyable text area with a ready-to-send email and includes the
-    total number of rows generated in the cleaned report.
-    """
-
+def render_summary(summaries: Dict[str, Dict[str, int]]) -> None:
     total = summaries.get("TOTAL", {})
+    duplicates = total.get("duplicates_removed", 0)
+    invalids = total.get("invalid_contacts_cleared", 0)
     final_rows = total.get("final_rows", 0)
 
-    # Build a human-friendly period string using the existing ordinal helper.
-    if start and end:
-        s, e = (start, end) if start <= end else (end, start)
-        period = f"{s.strftime('%B')} {_ordinal(s.day)} to {_ordinal(e.day)}"
-    else:
-        period = "the selected period"
-
-    file_label = filename or "Missed Session Report"
-    # Use only the stem of the filename for a cleaner subject line if possible.
-    try:
-        from pathlib import Path
-
-        file_label = Path(file_label).stem
-    except Exception:
-        pass
-
-    subject = f"{file_label} ({period}) + Weekly Warning Letter Report"
-
-    email_lines = [
-        subject,
-        "Hi Jay,",
-        "",
-        f"Please find attached the Missed Session Report for the period of {period}.",
-        f"Rows included: {final_rows}",
-        "",
-        "I’ve added two additional columns:",
-        "Column F: Entry labels received from mentors.",
-        "Column E: Standardized labels formatted to align with ADEK’s preferences.",
-        "Feel free to use or adjust them as needed.",
-        "Also, please find the weekly warning letter submissions attached.",
-        "Let me know if you need any further clarification.",
-        "Kind regards,",
+    primary_lines = [
+        f"{duplicates} duplicate rows removed",
+        f"{invalids} contact fields cleared",
+        f"{final_rows} rows ready for download",
     ]
 
-    email_text = "\n".join(email_lines)
+    detail_lines = [
+        f"{sheet_name}: {metrics.get('final_rows', 0)} rows (duplicates removed {metrics.get('duplicates_removed', 0)}, contacts cleared {metrics.get('invalid_contacts_cleared', 0)})"
+        for sheet_name, metrics in summaries.items()
+        if sheet_name != "TOTAL"
+    ]
 
-    st.markdown('<div class="section-title">Email Template</div>', unsafe_allow_html=True)
-    # Use a textarea so users can quickly copy the full email body.
-    st.text_area("Copy-ready email", value=email_text, height=240)
+    html = "".join(f"<div class='summary-line'>{line}</div>" for line in primary_lines)
+    if detail_lines:
+        html += f"<hr style='border: none; border-top: 1px solid {THEME_NAVY}; margin: 0.6rem 0;'/>"
+        html += "".join(f"<div class='summary-line'>{line}</div>" for line in detail_lines)
+
+    st.markdown('<div class="section-title">Summary</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="summary-box">{html}</div>', unsafe_allow_html=True)
 
 
 def main() -> None:
@@ -308,14 +284,7 @@ def main() -> None:
         )
 
     if st.session_state["summaries"]:
-        # Display a copy-ready email template instead of the original summary box.
-        # Pass the stored source filename and the selected week range to render the period.
-        render_summary(
-            st.session_state["summaries"],
-            st.session_state.get("source_name", file_name_override),
-            week_start,
-            week_end,
-        )
+        render_summary(st.session_state["summaries"])
         st.markdown('<div class="section-title">Download</div>', unsafe_allow_html=True)
         stored_name = st.session_state["source_name"] or "cleaned"
         if stored_name.lower().endswith(".xlsx"):
